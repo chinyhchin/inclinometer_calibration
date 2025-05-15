@@ -1,0 +1,220 @@
+import numpy as np
+from scipy import linalg
+from matplotlib import pyplot as plt
+import csv
+
+ #required data input file: x,y,z values in .csv (text, comma separated value) format.
+  
+class Accelerometer(object):
+    
+    '''
+        Accelerometer calibration using ellipsoid fitting
+    References:
+        - Adapted from magnetometer calibration code
+            -  https://github.com/jremington/LSM9DS1-AHRS/blob/main/calibrate3.py
+            -  https://teslabs.com/articles/magnetometer-calibration/      
+            -  https://github.com/nliaudat/magnetometer_calibration/blob/main/calibrate.py
+        - Uses Li's ellipsoid specific fitting method
+            -  https://ieeexplore.ieee.org/document/1290055
+        
+    '''
+    Gravity = 1.0  # 1 g norm of gravitational acceleration
+
+    def __init__(self, F=Gravity): 
+
+
+        # initialize values
+        self.F   = F # 1g
+        self.b   = np.zeros([3, 1]) # Bias zero-g offset
+        self.A_1 = np.eye(3) # Scale & misalignment correction
+        
+    def run(self):
+        # Load data 
+        input_file = "ADXL355_rawdata_20.0C_20250515_085026.csv" # Change filename
+        data_lsb = np.loadtxt(input_file,
+                            delimiter='\t',
+                            skiprows=1, 
+                            usecols=(1, 2, 3))
+       
+        # Convert to g unit based on manufacturer datasheet
+        sensitivity = 256000 #Scale factor of 1/256000 g/LSB
+        data = data_lsb/sensitivity
+
+        print("Shape of data array:",data.shape)
+        print("\nData normalized to ",self.F, "g")
+        #print("datatype of data:",data.dtype)
+        print("\nFirst 5 rows raw:\n", data[:5])
+        
+        # ellipsoid fit
+        s = np.array(data).T
+        M, n, d = self.__ellipsoid_fit(s) # Ellipsoid parameters
+
+        # calibration parameters
+        M_1 = linalg.inv(M) #M^(-1)
+        self.b = -np.dot(M_1, n) # Zero-g offset
+        self.A_1 = np.real(self.F / np.sqrt(np.dot(n.T, np.dot(M_1, n)) - d) * linalg.sqrtm(M)) #Combined correction matrix A^(-1)
+        
+        print("\nZero-g offset (bias):\n",self.b.flatten())        
+        print("\nScale and misalignment correction matrix:\n",self.A_1)
+           
+        # Calibrate data
+        result = [] 
+        for row in data: 
+        
+            # subtract bias (zero-g offset)
+            x_off  = row[0]-self.b[0]
+            y_off  = row[1]-self.b[1]
+            z_off  = row[2]-self.b[2]
+            
+            #multiply by the inverse correction matrix
+            x_cal = x_off *  self.A_1[0,0] + y_off *  self.A_1[0,1]  + z_off *  self.A_1[0,2] 
+            y_cal = x_off *  self.A_1[1,0] + y_off *  self.A_1[1,1]  + z_off *  self.A_1[1,2] 
+            z_cal = x_off *  self.A_1[2,0] + y_off *  self.A_1[2,1]  + z_off *  self.A_1[2,2] 
+            
+            result.append([x_cal, y_cal, z_cal])
+
+        result = np.array(result)
+        
+        # -------- Plot Comparison Raw vs Calibrated Data --------
+        units = "g"
+        rawData = data
+        calibData = result
+
+        # XY plot
+        plt.figure()
+        plt.plot(rawData[:, 0], rawData[:, 1], 'b*', label='Raw Meas.')
+        plt.plot(calibData[:, 0], calibData[:, 1], 'r*', label='Calibrated Meas.')
+        plt.title('XY Accelerometer Data')
+        plt.xlabel(f'X [{units}]')
+        plt.ylabel(f'Y [{units}]')
+        plt.legend()
+        plt.grid()
+        plt.axis('equal')
+
+        # YZ plot
+        plt.figure()
+        plt.plot(rawData[:, 1], rawData[:, 2], 'b*', label='Raw Meas.')
+        plt.plot(calibData[:, 1], calibData[:, 2], 'r*', label='Calibrated Meas.')
+        plt.title('YZ Accelerometer Data')
+        plt.xlabel(f'Y [{units}]')
+        plt.ylabel(f'Z [{units}]')
+        plt.legend()
+        plt.grid()
+        plt.axis('equal')
+
+        # XZ plot
+        plt.figure()
+        plt.plot(rawData[:, 0], rawData[:, 2], 'b*', label='Raw Meas.')
+        plt.plot(calibData[:, 0], calibData[:, 2], 'r*', label='Calibrated Meas.')
+        plt.title('XZ Accelerometer Data')
+        plt.xlabel(f'X [{units}]')
+        plt.ylabel(f'Z [{units}]')
+        plt.legend()
+        plt.grid()
+        plt.axis('equal')
+
+        # 3D scatter
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.scatter(rawData[:, 0], rawData[:, 1], rawData[:, 2], color='r', label='Raw')
+        ax.scatter(calibData[:, 0], calibData[:, 1], calibData[:, 2], color='b', label='Calibrated')
+        ax.set_title('3D Scatter Plot of Accelerometer Data')
+        ax.set_xlabel(f'X [{units}]')
+        ax.set_ylabel(f'Y [{units}]')
+        ax.set_zlabel(f'Z [{units}]')
+        ax.legend()
+
+        plt.show()
+        
+        
+        '''   
+        # Plot results
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.scatter(result[:,0], result[:,1], result[:,2], marker='o', color='g')
+        ax.set_title('Calibrated Accelerometer Data (1g sphere)')
+        plt.show()    
+        '''       
+        print("\nFirst 5 rows calibrated:\n")
+        for row in result[:5]:
+            print(row.flatten())
+        
+        # Create output filename by inserting "_calib" before ".csv"
+        output_file = input_file.replace(".csv", "_calib.csv")
+
+        # Save the calibrated result
+        with open(output_file, 'w', newline='') as f:
+            writer = csv.writer(f, delimiter='\t')
+            writer.writerow(['x_g', 'y_g', 'z_g'])
+
+            for row in result:
+                writer.writerow([row[0][0], row[1][0], row[2][0]])
+        
+        print(f"\nSaved calibrated data to: {output_file}")
+                
+    def __ellipsoid_fit(self, s):
+        ''' Estimate ellipsoid parameters from a set of points.
+
+            Parameters
+            ----------
+            s : array_like
+              The samples (M,N) where M=3 (x,y,z) and N=number of samples.
+
+            Returns
+            -------
+            M, n, d : array_like, array_like, float
+              The ellipsoid parameters M, n, d.
+
+            References
+            ----------
+            .. [1] Qingde Li; Griffiths, J.G., "Least squares ellipsoid specific
+               fitting," in Geometric Modeling and Processing, 2004.
+               Proceedings, vol., no., pp.335-340, 2004
+        '''
+
+         # Form design matrix
+         # D (samples) 
+        D = np.array([s[0]**2., s[1]**2., s[2]**2.,
+                      2.*s[1]*s[2], 2.*s[0]*s[2], 2.*s[0]*s[1],
+                      2.*s[0], 2.*s[1], 2.*s[2], np.ones_like(s[0])])
+
+        # S, S_11, S_12, S_21, S_22 (eq. 11)
+        S = np.dot(D, D.T)
+        S_11 = S[:6,:6]
+        S_12 = S[:6,6:]
+        S_21 = S[6:,:6]
+        S_22 = S[6:,6:]
+
+        # C (Eq. 8, k=4)
+        C = np.array([[-1,  1,  1,  0,  0,  0],
+                      [ 1, -1,  1,  0,  0,  0],
+                      [ 1,  1, -1,  0,  0,  0],
+                      [ 0,  0,  0, -4,  0,  0],
+                      [ 0,  0,  0,  0, -4,  0],
+                      [ 0,  0,  0,  0,  0, -4]])
+
+        # v_1 (eq. 15, solution)
+        E = np.dot(linalg.inv(C),
+                   S_11 - np.dot(S_12, np.dot(linalg.inv(S_22), S_21)))
+
+        E_w, E_v = np.linalg.eig(E)
+
+        v_1 = E_v[:, np.argmax(E_w)]
+        if v_1[0] < 0: v_1 = -v_1
+
+        # v_2 (eq. 13, solution)
+        v_2 = np.dot(np.dot(-np.linalg.inv(S_22), S_21), v_1)
+
+        # quadratic-form parameters, parameters h and f swapped as per correction by Roger R on Teslabs page
+        M = np.array([[v_1[0], v_1[5], v_1[4]],
+                      [v_1[5], v_1[1], v_1[3]],
+                      [v_1[4], v_1[3], v_1[2]]])
+        n = np.array([[v_2[0]],
+                      [v_2[1]],
+                      [v_2[2]]])
+        d = v_2[3]
+
+        return M, n, d
+        
+if __name__=='__main__':
+        Accelerometer().run()
