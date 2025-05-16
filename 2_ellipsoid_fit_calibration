@@ -30,7 +30,7 @@ class Accelerometer(object):
         
     def run(self):
         # Load data 
-        input_file = "ADXL355_rawdata_20.0C_20250515_085026.csv" # Change filename
+        input_file = "ADXL355_rawdata_20.0C_20250516_160534.csv" # Change filename
         data_lsb = np.loadtxt(input_file,
                             delimiter='\t',
                             skiprows=1, 
@@ -54,9 +54,24 @@ class Accelerometer(object):
         self.b = -np.dot(M_1, n) # Zero-g offset
         self.A_1 = np.real(self.F / np.sqrt(np.dot(n.T, np.dot(M_1, n)) - d) * linalg.sqrtm(M)) #Combined correction matrix A^(-1)
         
-        print("\nZero-g offset (bias):\n",self.b.flatten())        
-        print("\nScale and misalignment correction matrix:\n",self.A_1)
-           
+        print("\nZero-g offset (bias),b:\n",self.b.flatten())        
+        print("\nScale and misalignment correction matrix, A^(-1):\n",self.A_1)
+
+        # Create parameters_file filename by inserting "_parameters" before ".csv"
+        parameters_file = input_file.replace(".csv", "_parameters.csv")
+
+        # Save the calibration parameters
+        with open(parameters_file, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(['Calibration Parameters']) # Write header 
+            writer.writerow(['Zero-g offset (bias)(b_x, b_y, b_z)']) 
+            writer.writerow(self.b.flatten().tolist()) # Write bias vector          
+            writer.writerow(['Scale and misalignment correction matrix, A^(-1)']) # Write matrix A_inv header
+            for row in self.A_1:
+                writer.writerow(row.tolist())   # Write rows of A_1
+
+        print(f"\nSaved calibration parameters to: {parameters_file}")
+                             
         # Calibrate data
         result = [] 
         for row in data: 

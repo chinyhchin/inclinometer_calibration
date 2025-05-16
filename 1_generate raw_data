@@ -33,8 +33,8 @@ def generate_test_data(temp=25.0, sample_rate=100):
     
     # === 2. Apply known sensor imperfections ===
     # Add sensor imperfection error parameters
-    true_b = np.array([0.001, 0.001, 0.001])  # Offset in g
-    true_S = np.diag([1, 1, 1])    # Scale factors in g/g
+    true_b = np.array([0, 0.01, 0.005])  # Offset in g
+    true_S = np.diag([1.02, 0.99, 1.05])    # Scale factors in g/g
     true_N = np.array([  # Non-orthogonality of sensor axis
         [1, 0, 0],
         [0, 1, 0],
@@ -45,7 +45,9 @@ def generate_test_data(temp=25.0, sample_rate=100):
     ])
     true_A = true_S @ true_N.T # Combined scale and misalignment matrix A
     true_A_1 = np.linalg.inv(true_A) # Combined correction matrix A^(-1)
-    print("Scale and misalignment correction matrix:\n",true_A_1)
+    
+    print("True Zero-g offset (bias), b:\n",true_b)
+    print("True Scale and misalignment correction matrix, A^(-1):\n",true_A_1)
 
     # Apply sensor errors transformations
     distorted_g = (ideal @ true_A) + true_b # Distorted data in g
