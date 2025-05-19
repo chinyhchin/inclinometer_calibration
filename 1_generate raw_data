@@ -67,7 +67,7 @@ def generate_test_data(temp=25.0, sample_rate=100):
     filename = f"ADXL355_rawdata_{temp:.1f}C_{timestamp}.csv"
     
     with open(filename, 'w', newline='') as f:
-        writer = csv.writer(f, delimiter='\t')
+        writer = csv.writer(f, delimiter=',')
         writer.writerow(['timestamp','x_lsb','y_lsb','z_lsb','temperature_C'])
         for i in range(num_samples):
             writer.writerow([

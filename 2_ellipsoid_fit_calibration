@@ -30,9 +30,9 @@ class Accelerometer(object):
         
     def run(self):
         # Load data 
-        input_file = "ADXL355_rawdata_20.0C_20250516_160534.csv" # Change filename
+        input_file = "ADXL355_rawdata_20.0C_20250519_112536.csv" # Change filename
         data_lsb = np.loadtxt(input_file,
-                            delimiter='\t',
+                            delimiter=',',
                             skiprows=1, 
                             usecols=(1, 2, 3))
        

@@ -17,7 +17,7 @@ def load_calibration_parameters(filename):
 # Load Raw Measurement Data
 def load_measurements(filename):
     data_lsb = np.loadtxt(filename, 
-                      delimiter='\t', 
+                      delimiter=',', 
                       skiprows=1,                  
                       usecols=(1, 2, 3))
     # Convert to g unit based on manufacturer datasheet
@@ -44,7 +44,7 @@ def apply_calibration(data, b, A_1):
 
 # Save Calibrated Data
 def save_calibrated_data(filename, calibrated_data):
-    np.savetxt(filename, calibrated_data, delimiter='\t', fmt='%.6f', header='X_cal,Y_cal,Z_cal', comments='')
+    np.savetxt(filename, calibrated_data, delimiter=',', fmt='%.6f', header='X_cal,Y_cal,Z_cal', comments='')
 
 # Plot Comparison Raw vs Calibrated Data
 def plot_calibration_results(rawData, calibData, title=""):
@@ -99,9 +99,9 @@ def plot_calibration_results(rawData, calibData, title=""):
 
 # Main Workflow
 if __name__ == "__main__":
-    calib_file = 'ADXL355_rawdata_20.0C_20250516_160534_parameters.csv'
-    raw_data_file = 'ADXL355_rawdata_20.0C_20250516_160534.csv'
-    output_file = 'ADXL355_rawdata_20.0C_20250516_160534_calibrated.csv'
+    calib_file = 'ADXL355_rawdata_20.0C_20250519_112536_parameters.csv'
+    raw_data_file = 'ADXL355_rawdata_20.0C_20250519_112536.csv'
+    output_file = 'ADXL355_rawdata_20.0C_20250519_112536_calibrated.csv'
 
     b, A_1 = load_calibration_parameters(calib_file)
     raw_data = load_measurements(raw_data_file)
