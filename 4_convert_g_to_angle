@@ -24,7 +24,7 @@ def accel_to_angles(accel_data):
 # Load Calibrated Measurement Data
 def load_measurements(filename):
     data = np.loadtxt(filename, 
-                      delimiter='\t', 
+                      delimiter=',', 
                       skiprows=1,                  
                       usecols=(0, 1, 2))
           
@@ -32,16 +32,16 @@ def load_measurements(filename):
 
 # Save Angle Data
 def save_angle_data(filename, data):
-    np.savetxt(filename, data, delimiter='\t', fmt='%.6f', header='theta,psi,phi', comments='')
+    np.savetxt(filename, data, delimiter=',', fmt='%.6f', header='theta,psi,phi', comments='')
 
 def plot_angles(angles):
     """
-    Plot theta, phi, and psi angles over time.
-    :param angles: Nx3 array of angles [theta, phi, psi]
+    Plot theta, psi, and phi angles over time.
+    :param angles: Nx3 array of angles [theta, psi, phi]
     """
     theta = angles[:, 0]
-    phi   = angles[:, 1]
-    psi   = angles[:, 2]
+    psi   = angles[:, 1]
+    phi   = angles[:, 2]
     time = np.arange(len(theta))  # Assuming uniform sampling
 
     plt.figure(figsize=(12, 8))
@@ -70,8 +70,8 @@ def plot_angles(angles):
 
 # Main Workflow
 if __name__ == "__main__":
-    calib_g_file = 'ADXL355_rawdata_20.0C_20250519_085329_calibrated.csv'
-    output_angle_file = 'ADXL355_rawdata_20.0C_20250519_085329_angle.csv'
+    calib_g_file = 'accelerometer_log_20250519_105855_calibrated.csv'
+    output_angle_file = 'accelerometer_log_20250519_105855_angle.csv'
 
     g_data = load_measurements(calib_g_file)
     angle = accel_to_angles(g_data)
