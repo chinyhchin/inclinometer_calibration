@@ -1,9 +1,11 @@
 import numpy as np
+import pandas as pd
 from scipy import linalg
 from matplotlib import pyplot as plt
-import csv
+from pathlib import Path
+#import csv
 
- #required data input file: x,y,z values in .csv (text, comma separated value) format.
+#required data input file: x,y,z lsb values in .csv (text, comma separated value) format.
   
 class Accelerometer(object):
     
@@ -20,21 +22,129 @@ class Accelerometer(object):
     '''
     Gravity = 1.0  # 1 g norm of gravitational acceleration
 
-    def __init__(self, F=Gravity): 
+    def __init__(self, input_file, F=Gravity): 
 
 
         # initialize values
         self.F   = F # 1g
-        self.b   = np.zeros([3, 1]) # Bias zero-g offset
-        self.A_1 = np.eye(3) # Scale & misalignment correction
-        
+        self.input_file = Path(input_file)
+        self.b   = np.zeros([3, 1]) # Bias zero-g offset, b
+        self.A_1 = np.eye(3) # Scale & misalignment correction, A^(-1)
+
     def run(self):
-        # Load data 
-        input_file = "ADXL355_rawdata_20.0C_20250519_112536.csv" # Change filename
-        data_lsb = np.loadtxt(input_file,
-                            delimiter=',',
-                            skiprows=1, 
-                            usecols=(1, 2, 3))
+        # 1. Load and preprocess
+        raw_data = self.load_data()
+        
+        # 2. Calibrate
+        self.compute_calibration_parameters(raw_data)
+        calibrated_data = self.calibrate(raw_data)
+        
+        # 3. Save results
+        self.save_parameters()
+        self.save_calibrated_data(calibrated_data)
+        
+        # 4. Visualize
+        self.plot_comparison(raw_data, calibrated_data)
+
+    def load_data(self):
+        df = pd.read_csv(self.input_file)
+        data_lsb = df.iloc[:, 1:4].values.astype(float) # Raw data in LSB unit    
+
+        # Convert to g unit based on manufacturer datasheet
+        sensitivity = 256000  # Scale factor of 1/256000 g/LSB
+        data_g = data_lsb / sensitivity
+
+        print("Shape of data array:", data_g.shape)
+        print(f"\nData normalized to {self.F}g\nFirst 5 rows raw:\n", data_g[:5])
+        return data_g # Raw data in g unit    
+
+    def compute_calibration_parameters(self, data): # Apply ellipsoid fit
+        s = np.array(data).T
+        M, n, d = self.ellipsoid_fit(s)
+
+        # calibration error parameters
+        M_1 = linalg.inv(M) #M^(-1)
+        self.b = -np.dot(M_1, n) # Zero-g offset
+        self.A_1 = np.real(self.F / np.sqrt(np.dot(n.T, np.dot(M_1, n)) - d) * linalg.sqrtm(M)) #Combined correction matrix A^(-1)
+
+        print("\nZero-g offset (bias), b [g]:\n", self.b.flatten())
+        print("\nScale and misalignment correction matrix, A^(-1):\n", self.A_1)
+
+    def calibrate(self, data): # Calibrate the raw data using the obtained parameters
+        result = []
+        for row in data:
+            
+            # subtract bias (zero-g offset)
+            x_off = row[0] - self.b[0]
+            y_off = row[1] - self.b[1]
+            z_off = row[2] - self.b[2]
+
+            #multiply by the inverse correction matrix
+            x_cal = x_off * self.A_1[0, 0] + y_off * self.A_1[0, 1] + z_off * self.A_1[0, 2]
+            y_cal = x_off * self.A_1[1, 0] + y_off * self.A_1[1, 1] + z_off * self.A_1[1, 2]
+            z_cal = x_off * self.A_1[2, 0] + y_off * self.A_1[2, 1] + z_off * self.A_1[2, 2]
+            
+            result.append([x_cal, y_cal, z_cal])
+        result = np.array(result)
+
+        print("\nFirst 5 rows calibrated:\n")
+        for row in result[:5]:
+            print(row.flatten())
+        return result
+
+    def save_parameters(self):
+        param_path = self.input_file.with_name(self.input_file.stem + "_parameters.csv")
+        with param_path.open('w', newline='') as f:
+            f.write(f'Calibration parameters for {self.input_file.name}\n')
+            f.write('Zero-g offset (bias) [g] (b_x, b_y, b_z)\n')
+            f.write(f'{self.b[0][0]:.9f}, {self.b[1][0]:.9f}, {self.b[2][0]:.9f}\n\n')
+            f.write('Scale and misalignment correction matrix, A^(-1)\n')
+            for row in self.A_1:
+                f.write(f"{row[0]:.9f}, {row[1]:.9f}, {row[2]:.9f}\n")
+        print(f"\nSaved calibration parameters to: {param_path}")
+
+    def save_calibrated_data(self, result):
+        calib_path = self.input_file.with_name(self.input_file.stem + "_calib.csv")
+        # Ensure shape is in 2D
+        result_2d = np.squeeze(result) # Remove dimensions with size 1
+        calib_df = pd.DataFrame(result_2d, columns=['x_g', 'y_g', 'z_g'])
+        calib_df.to_csv(calib_path, index=False)
+        print(f"\nSaved calibrated data to: {calib_path}")
+
+    def plot_comparison(self, raw, calibrated):
+        fig = plt.figure(figsize=(15, 10))
+        
+        # 2D Plots
+        planes = ['XY', 'YZ', 'XZ']
+        for i, (x, y) in enumerate([(0, 1), (1, 2), (0, 2)]):
+            ax = fig.add_subplot(2, 2, i+1)
+            ax.plot(raw[:, x], raw[:, y], 'b.', alpha=0.5, label='Raw')
+            ax.plot(calibrated[:, x], calibrated[:, y], 'r.', alpha=0.5, label='Calibrated')
+            ax.set_title(f'{planes[i]} Plane')
+            ax.set_xlabel(f'{planes[i][0]} [g]')
+            ax.set_ylabel(f'{planes[i][1]} [g]')
+            ax.axis('equal')
+            ax.grid()
+            ax.legend()
+
+        # 3D Plot
+        ax3d = fig.add_subplot(2, 2, 4, projection='3d')
+        ax3d.scatter(raw[:, 0], raw[:, 1], raw[:, 2], c='b', label='Raw', alpha=0.3)
+        ax3d.scatter(calibrated[:, 0], calibrated[:, 1], calibrated[:, 2], c='r', label='Calibrated', alpha=0.3)
+        ax3d.set_title('3D Comparison')
+        ax3d.set_xlabel('X [g]')
+        ax3d.set_ylabel('Y [g]')
+        ax3d.set_zlabel('Z [g]')
+        ax3d.axis('equal')
+        ax3d.legend()
+
+        plt.tight_layout()
+        plt.show()
+            
+    def run2(self):
+        # Load and preprocess data 
+        df = pd.read_csv(self.input_file)
+        data_lsb = df.iloc[:, 1:4].values.astype(float)
        
         # Convert to g unit based on manufacturer datasheet
         sensitivity = 256000 #Scale factor of 1/256000 g/LSB
@@ -42,14 +152,13 @@ class Accelerometer(object):
 
         print("Shape of data array:",data.shape)
         print("\nData normalized to ",self.F, "g")
-        #print("datatype of data:",data.dtype)
         print("\nFirst 5 rows raw:\n", data[:5])
         
         # ellipsoid fit
         s = np.array(data).T
-        M, n, d = self.__ellipsoid_fit(s) # Ellipsoid parameters
+        M, n, d = self.ellipsoid_fit(s) # Ellipsoid parameters
 
-        # calibration parameters
+        # calibration error parameters
         M_1 = linalg.inv(M) #M^(-1)
         self.b = -np.dot(M_1, n) # Zero-g offset
         self.A_1 = np.real(self.F / np.sqrt(np.dot(n.T, np.dot(M_1, n)) - d) * linalg.sqrtm(M)) #Combined correction matrix A^(-1)
@@ -57,10 +166,20 @@ class Accelerometer(object):
         print("\nZero-g offset (bias),b:\n",self.b.flatten())        
         print("\nScale and misalignment correction matrix, A^(-1):\n",self.A_1)
 
-        # Create parameters_file filename by inserting "_parameters" before ".csv"
-        parameters_file = input_file.replace(".csv", "_parameters.csv")
-
-        # Save the calibration parameters
+        # Create error parameters file filename by inserting "_parameters" before ".csv"
+        param_path = self.input_file.with_name(self.input_file.stem + "_parameters.csv")
+        
+        # Save the calibration error parameters
+        with param_path.open('w', newline='') as f:
+            f.write(f'Calibration parameters for {self.input_file.name}\n')
+            f.write('Zero-g offset (bias) [g] (b_x, b_y, b_z)\n')
+            f.write(f'{self.b[0][0]:.6f},{self.b[1][0]:.6f},{self.b[2][0]:.6f}\n\n')
+            #f.write(','.join(map(str, self.b.flatten())) + '\n')
+            f.write('Scale and misalignment correction matrix, A^(-1)\n')
+            for row in self.A_1:
+                f.write(f"{row[0]:.6f}, {row[1]:.6f}, {row[2]:.6f}\n")
+                #f.write(','.join(map(str, row)) + '\n')
+        '''
         with open(parameters_file, mode='w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(['Calibration Parameters']) # Write header 
@@ -69,8 +188,8 @@ class Accelerometer(object):
             writer.writerow(['Scale and misalignment correction matrix, A^(-1)']) # Write matrix A_inv header
             for row in self.A_1:
                 writer.writerow(row.tolist())   # Write rows of A_1
-
-        print(f"\nSaved calibration parameters to: {parameters_file}")
+        '''
+        print(f"\nSaved calibration parameters to: {param_path}")
                              
         # Calibrate data
         result = [] 
@@ -91,6 +210,7 @@ class Accelerometer(object):
         result = np.array(result)
         
         # -------- Plot Comparison Raw vs Calibrated Data --------
+        '''
         units = "g"
         rawData = data
         calibData = result
@@ -140,8 +260,36 @@ class Accelerometer(object):
         ax.legend()
 
         plt.show()
+        '''
+        raw = data
+        calibrated = result
+        fig = plt.figure(figsize=(15, 10))
+    
+        # 2D Plots
+        planes = ['XY', 'YZ', 'XZ']
+        for i, (x, y) in enumerate([(0,1), (1,2), (0,2)]):
+            ax = fig.add_subplot(2, 2, i+1)
+            ax.plot(raw[:,x], raw[:,y], 'b.', alpha=0.5, label='Raw')
+            ax.plot(calibrated[:,x], calibrated[:,y], 'r.', alpha=0.5, label='Calibrated')
+            ax.set_title(f'{planes[i]} Plane')
+            ax.set_xlabel(f'{planes[i][0]} [g]')
+            ax.set_ylabel(f'{planes[i][1]} [g]')
+            ax.axis('equal')
+            ax.grid()
+            ax.legend()
+    
+        # 3D Plot
+        ax3d = fig.add_subplot(2, 2, 4, projection='3d')
+        ax3d.scatter(raw[:,0], raw[:,1], raw[:,2], c='b', label='Raw', alpha=0.3)
+        ax3d.scatter(calibrated[:,0], calibrated[:,1], calibrated[:,2], c='r', label='Calibrated', alpha=0.3)
+        ax3d.set_title('3D Comparison')
+        ax3d.set_xlabel('X [g]')
+        ax3d.set_ylabel('Y [g]')
+        ax3d.set_zlabel('Z [g]')
+        ax3d.legend()
         
-        
+        plt.tight_layout()
+        plt.show() 
         '''   
         # Plot results
         fig = plt.figure()
@@ -155,19 +303,27 @@ class Accelerometer(object):
             print(row.flatten())
         
         # Create output filename by inserting "_calib" before ".csv"
+        calib_path = self.input_file.with_name(self.input_file.stem + "_calib.csv")
         output_file = input_file.replace(".csv", "_calib.csv")
 
         # Save the calibrated result
+        #pd.DataFrame(result, columns=['x_g', 'y_g', 'z_g']).to_csv(calib_path, sep=',', index=False)
+        # Ensure shape is (300, 3)
+        result_2d = np.squeeze(result)  # removes dimensions with size 1
+        calib_df = pd.DataFrame(result_2d, columns=['x_g', 'y_g', 'z_g'])
+        calib_df.to_csv(calib_path, index=False)
+
+        '''
         with open(output_file, 'w', newline='') as f:
-            writer = csv.writer(f, delimiter='\t')
+            writer = csv.writer(f, delimiter=',')
             writer.writerow(['x_g', 'y_g', 'z_g'])
 
             for row in result:
                 writer.writerow([row[0][0], row[1][0], row[2][0]])
-        
-        print(f"\nSaved calibrated data to: {output_file}")
+        '''
+        print(f"\nSaved calibrated data to: {calib_path}")
                 
-    def __ellipsoid_fit(self, s):
+    def ellipsoid_fit(self, s):
         ''' Estimate ellipsoid parameters from a set of points.
 
             Parameters
@@ -232,4 +388,7 @@ class Accelerometer(object):
         return M, n, d
         
 if __name__=='__main__':
-        Accelerometer().run()
+        input_file = "accelerometer_log_20250520_143125.csv" # Replace with your file
+        Accelerometer(input_file).run()
+        
+        
