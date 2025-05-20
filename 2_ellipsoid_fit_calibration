@@ -46,10 +46,15 @@ class Accelerometer(object):
         # 4. Visualize
         self.plot_comparison(raw_data, calibrated_data)
 
+        # 5. Evaluate calibration quality
+        self.evaluate_calibration_quality(calibrated_data, tolerance=0.01)
+        self.plot_norm_distribution(np.linalg.norm(calibrated_data, axis=1))
+
     def load_data(self):
         df = pd.read_csv(self.input_file)
         data_lsb = df.iloc[:, 1:4].values.astype(float) # Raw data in LSB unit    
-
+        #data_g = df.iloc[:, 0:3].values.astype(float) # If use raw data in g unit
+        
         # Convert to g unit based on manufacturer datasheet
         sensitivity = 256000  # Scale factor of 1/256000 g/LSB
         data_g = data_lsb / sensitivity
@@ -140,12 +145,54 @@ class Accelerometer(object):
 
         plt.tight_layout()
         plt.show()
-            
+    
+    def evaluate_calibration_quality(self, calibrated_data, tolerance=0.01):
+        """
+        Evaluate the calibration quality of accelerometer data.
+
+        Parameters:
+            calibrated_data (np.ndarray): Nx3 array of calibrated accelerometer readings in g.
+            tolerance (float): Acceptable deviation from unit norm (default ±1%).
+
+        Returns:
+            dict: Metrics including min, max, mean norm, std, % inside tolerance, and flags.
+        """
+        norms = np.linalg.norm(calibrated_data, axis=1)
+        
+        stats = {
+            'min_norm': float(np.min(norms)),
+            'max_norm': float(np.max(norms)),
+            'mean_norm': float(np.mean(norms)),
+            'std_norm': float(np.std(norms)),
+            'within_tolerance (%)': float(np.mean(np.abs(norms - 1.0) <= tolerance) * 100)
+        }
+
+        stats['passed'] = stats['within_tolerance (%)'] > 95.0  # >95% within tolerance = pass
+
+        print("\n--- Calibration Quality Report ---")
+        for key, val in stats.items():
+            print(f"{key}: {val:.6f}" if isinstance(val, float) else f"{key}: {val}")
+        return stats
+
+    def plot_norm_distribution(self, norms):
+        plt.figure(figsize=(8,4))
+        plt.hist(norms, bins=50, alpha=0.7, color='steelblue')
+        plt.axvline(1.0, color='red', linestyle='--', label='Ideal (1g)')
+        plt.title("Distribution of Norms (Post-Calibration)")
+        plt.xlabel("Norm (g)")
+        plt.ylabel("Frequency")
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.show()
+
+    
+        
     def run2(self):
         # Load and preprocess data 
         df = pd.read_csv(self.input_file)
         data_lsb = df.iloc[:, 1:4].values.astype(float)
-       
+        
         # Convert to g unit based on manufacturer datasheet
         sensitivity = 256000 #Scale factor of 1/256000 g/LSB
         data = data_lsb/sensitivity
@@ -388,7 +435,7 @@ class Accelerometer(object):
         return M, n, d
         
 if __name__=='__main__':
-        input_file = "accelerometer_log_20250520_143125.csv" # Replace with your file
+        input_file = "ADXL355_rawdata_20.0C_20250520_151719.csv" # Replace with your file
         Accelerometer(input_file).run()
         
         
