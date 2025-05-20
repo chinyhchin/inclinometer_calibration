@@ -1,8 +1,6 @@
 import numpy as np
-#import csv
 import pandas as pd
 from matplotlib import pyplot as plt
-
 
 # Load Calibration Parameters
 def load_calibration_parameters(filename):
@@ -14,17 +12,7 @@ def load_calibration_parameters(filename):
     A_inv = np.array([np.fromstring(lines[i], sep=',') for i in range(5, 8)])
 
     return bias, A_inv
-    '''
-    with open(filename, 'r') as f:
-        reader = csv.reader(f)
-        rows = list(reader)
-
-    # Bias is at row 2 (after headers), A_inv at rows 4-6
-    bias = np.array([float(x) for x in rows[2]])
-    A_inv = np.array([[float(x) for x in row] for row in rows[4:7]])
-
-    return bias, A_inv
-    '''
+    
 # Load Raw Measurement Data
 def load_measurements(filename):
     data_lsb = np.loadtxt(filename, # Raw data in lsb unit
@@ -61,8 +49,6 @@ def save_calibrated_data(raw_filename, calibrated_data):
     df.to_csv(output_file, index=False, float_format='%.9f')
     return output_file
     
-    # np.savetxt(filename, calibrated_data, delimiter=',', fmt='%.6f', header='X_cal,Y_cal,Z_cal', comments='')
-
 # Plot Comparison Raw vs Calibrated Data
 def plot_comparison(raw, calibrated):
         fig = plt.figure(figsize=(15, 10))
@@ -94,60 +80,10 @@ def plot_comparison(raw, calibrated):
         plt.tight_layout()
         plt.show()
 
-def plot_calibration_results(rawData, calibData, title=""):
-    units = "g"
-
-    # XY plot
-    plt.figure()
-    plt.plot(rawData[:, 0], rawData[:, 1], 'b*', label='Raw Meas.')
-    plt.plot(calibData[:, 0], calibData[:, 1], 'r*', label='Calibrated Meas.')
-    plt.title('XY Accelerometer Data')
-    plt.xlabel(f'X [{units}]')
-    plt.ylabel(f'Y [{units}]')
-    plt.legend()
-    plt.grid()
-    plt.axis('equal')
-
-    # YZ plot
-    plt.figure()
-    plt.plot(rawData[:, 1], rawData[:, 2], 'b*', label='Raw Meas.')
-    plt.plot(calibData[:, 1], calibData[:, 2], 'r*', label='Calibrated Meas.')
-    plt.title('YZ Accelerometer Data')
-    plt.xlabel(f'Y [{units}]')
-    plt.ylabel(f'Z [{units}]')
-    plt.legend()
-    plt.grid()
-    plt.axis('equal')
-
-    # XZ plot
-    plt.figure()
-    plt.plot(rawData[:, 0], rawData[:, 2], 'b*', label='Raw Meas.')
-    plt.plot(calibData[:, 0], calibData[:, 2], 'r*', label='Calibrated Meas.')
-    plt.title('XZ Accelerometer Data')
-    plt.xlabel(f'X [{units}]')
-    plt.ylabel(f'Z [{units}]')
-    plt.legend()
-    plt.grid()
-    plt.axis('equal')
-
-    # 3D scatter
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(rawData[:, 0], rawData[:, 1], rawData[:, 2], color='r', label='Raw')
-    ax.scatter(calibData[:, 0], calibData[:, 1], calibData[:, 2], color='b', label='Calibrated')
-    ax.set_title('3D Scatter Plot of Accelerometer Data')
-    ax.set_xlabel(f'X [{units}]')
-    ax.set_ylabel(f'Y [{units}]')
-    ax.set_zlabel(f'Z [{units}]')
-    ax.legend()
-
-    plt.show()
-        
-
 # Main Workflow
 if __name__ == "__main__":
-    raw_data_file = 'accelerometer_log_20250520_143125.csv'
-    parameter_file = 'accelerometer_log_20250520_143125_parameters.csv'
+    raw_data_file = 'ADXL355_rawdata_20.0C_20250520_164608.csv'
+    parameter_file = 'ADXL355_rawdata_20.0C_20250520_164608_parameters.csv'
         
     b, A_1 = load_calibration_parameters(parameter_file)
     raw_data = load_measurements(raw_data_file)

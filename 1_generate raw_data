@@ -1,6 +1,4 @@
-# generate_raw_data_v2.py
 import numpy as np
-#import csv
 import pandas as pd
 from datetime import datetime
 
@@ -37,12 +35,9 @@ def generate_test_data(temp=20.0, sample_rate=100):
     true_b = np.array([0, 0.01, 0.005])  # zero-g offset (bias) in g
     true_S = np.diag([1.02, 0.99, 1.05])    # Scale factors in g/g
     true_N = np.array([  # Non-orthogonality of sensor axis (axis misalignment)
-        [1, 0, 0],
-        [0, 1, 0],
-        [0, 0, 1]
-        #[1.00, 0.015, -0.010],
-        #[0.005, 0.995, 0.020],
-        #[-0.012, 0.008, 1.01]
+        [1.00, 0.015, -0.010],
+        [0.005, 0.995, 0.020],
+        [-0.012, 0.008, 1.01]
     ])
     true_A = true_S @ true_N.T # Combined scale and misalignment matrix A
     true_A_1 = np.linalg.inv(true_A) # Combined correction matrix A^(-1)
@@ -58,10 +53,8 @@ def generate_test_data(temp=20.0, sample_rate=100):
     distorted_lsb = distorted_g * sensitivity # Distorted data in LSB
 
     # Apply noise 
-    noisy = distorted_lsb #+ np.random.normal(0, 50, distorted_lsb.shape) # Noisy data in LSB
+    noisy = distorted_lsb + np.random.normal(0, 500, distorted_lsb.shape) # Noisy data in LSB
     
-
-
     # === 3. Write to CSV with temp in filename ===
     num_samples = noisy.shape[0]
     timestamps = np.round(np.arange(num_samples) / sample_rate, 4)
@@ -77,23 +70,7 @@ def generate_test_data(temp=20.0, sample_rate=100):
 
     filename = f"ADXL355_rawdata_{temp:.1f}C_{datetime.now():%Y%m%d_%H%M%S}.csv"
     df.to_csv(filename, index=False)
-
-    '''
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"ADXL355_rawdata_{temp:.1f}C_{timestamp}.csv"
     
-    with open(filename, 'w', newline='') as f:
-        writer = csv.writer(f, delimiter=',')
-        writer.writerow(['timestamp','x_lsb','y_lsb','z_lsb','temperature_C'])
-        for i in range(num_samples):
-            writer.writerow([
-               round(i / sample_rate, 4),  # timestamp in seconds
-                int(noisy[i, 0]),    
-                int(noisy[i, 1]),  
-                int(noisy[i, 2]),
-                round(temp + np.random.normal(0, 0.1), 2)
-            ])
-    '''
     print(f"Generated {num_samples} samples at {temp}°C into {filename}")
     
     return noisy
